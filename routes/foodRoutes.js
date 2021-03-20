@@ -1,23 +1,28 @@
 const express = require("express");
-const foodModel = require("../models/food");
+const { ObjectId } = require("mongodb");
+const foodCollection = require("../db").foodCollection;
 const app = express();
 
 app.get("/foods", async (req, res) => {
-  const foods = await foodModel.find({});
+  const cursor = await foodCollection()
+    .find({})
+    .sort({ last_review: -1 })
+    .limit(Number.MAX_SAFE_INTEGER);
+
+  const foods = await cursor.toArray();
 
   try {
     res.send(foods);
   } catch (err) {
+    console.log("err", err);
     res.status(500).send(err);
   }
 });
 
 app.post("/food", async (req, res) => {
-  const food = new foodModel(req.body);
-
   try {
-    await food.save();
-    res.send(food);
+    const result = await foodCollection().insertOne(req.body);
+    res.status(201).send(`Food created with ID: ${result.insertedId}`);
   } catch (err) {
     res.status(500).send(err);
   }
@@ -25,21 +30,30 @@ app.post("/food", async (req, res) => {
 
 app.delete("/food/:id", async (req, res) => {
   try {
-    const food = await foodModel.findByIdAndDelete(req.params.id);
+    const result = await foodCollection().deleteOne({
+      _id: ObjectId(req.params.id),
+    });
 
-    if (!food) res.status(404).send("No item found");
-    res.status(200).send();
+    if (!result.deletedCount) res.status(404).send("No item found");
+
+    res.status(200).send(`Food with id ${req.params.id} deleted`);
   } catch (err) {
+    console.log("err", err);
     res.status(500).send(err);
   }
 });
 
 app.patch("/food/:id", async (req, res) => {
   try {
-    await foodModel.findByIdAndUpdate(req.params.id, req.body);
-    await foodModel.save();
-    res.send(food);
+    const result = await foodCollection().updateOne(
+      { _id: ObjectId(req.params.id) },
+      { $set: req.body },
+      { upsert: true }
+    );
+
+    res.send(`result.modifiedCount ${result.matchedCount}`);
   } catch (err) {
+    console.log("err", err);
     res.status(500).send(err);
   }
 });
